@@ -29,67 +29,63 @@ import java.util.HashMap;
 import javax.inject.Inject;
 
 
-public class MacAddressFunction {
+@FunctionTemplate(name = "getVendorName", scope = FunctionTemplate.FunctionScope.SIMPLE, nulls = FunctionTemplate.NullHandling.NULL_IF_NULL)
 
-  @FunctionTemplate(name = "getVendorName", scope = FunctionTemplate.FunctionScope.SIMPLE, nulls = FunctionTemplate.NullHandling.NULL_IF_NULL)
+public class MacAddressFunction implements DrillSimpleFunc {
+  @Param
+  VarCharHolder inputText;
 
-  public static class getVendorNameFunction implements DrillSimpleFunc {
+  @Output
+  VarCharHolder out;
 
-    //private static final org.slf4j.Logger logger = org.slf4j.LoggerFactory.getLogger(getVendorNameFunction.class);
+  @Inject
+  DrillBuf buffer;
 
-    @Param
-    VarCharHolder inputText;
+  @Workspace
+  HashMap<String, String> vendors;
 
-    @Output
-    VarCharHolder out;
+  public void setup() {
+    java.io.InputStream vendorFile = getClass().getClassLoader().getResourceAsStream("nmap-mac-prefixes.txt");
+    vendors = new HashMap<String, String>();
+    try {
+      java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(vendorFile));
 
-    @Inject
-    DrillBuf buffer;
-
-    @Workspace
-    HashMap<String, String> vendors;
-
-    public void setup() {
-      java.io.InputStream vendorFile = getClass().getClassLoader().getResourceAsStream("nmap-mac-prefixes.txt");
-      vendors = new HashMap<String, String>();
-      try {
-        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(vendorFile));
-
-        String line;
-        String key;
-        String value;
-        while ((line = br.readLine()) != null) {
-          key = line.substring(0, 6);
-          value = line.substring(7);
-          vendors.put(key, value);
-        }
-      } catch (java.io.IOException e) {
-        //logger.error("IOException encountered:  Could not read Vendor DB");
+      String line;
+      String key;
+      String value;
+      while ((line = br.readLine()) != null) {
+        key = line.substring(0, 6);
+        value = line.substring(7);
+        vendors.put(key, value);
       }
-    }
-
-    public void eval() {
-      String mac = org.apache.drill.exec.expr.fn.impl.StringFunctionHelpers.toStringFromUTF8(inputText.start, inputText.end, inputText.buffer);
-      String vendorName;
-
-      mac = mac.toUpperCase();
-      mac = mac.replace("-", "");
-      mac = mac.replace(":", "");
-      mac = mac.replace(" ", "");
-      mac = mac.substring(0, 6);
-
-      try {
-        vendorName = (String) vendors.get(mac);
-      } catch (Exception e) {
-        vendorName = "Unknown";
-        //logger.info("OUI " + mac + " not in Database");
-      }
-
-      out.buffer = buffer;
-      out.start = 0;
-      out.end = vendorName.getBytes().length;
-      buffer.setBytes(0, vendorName.getBytes());
+    } catch (java.io.IOException e) {
     }
   }
+
+  public void eval() {
+    String mac = org.apache.drill.exec.expr.fn.impl.StringFunctionHelpers.toStringFromUTF8(inputText.start, inputText.end, inputText.buffer);
+    String vendorName;
+
+    mac = mac.toUpperCase();
+    mac = mac.replace("-", "");
+    mac = mac.replace(":", "");
+    mac = mac.replace(" ", "");
+    mac = mac.substring(0, 6);
+
+    try {
+      vendorName = (String) vendors.get(mac);
+      if(vendorName == null){
+        vendorName = "Unknown";
+      }
+    } catch (Exception e) {
+      vendorName = "Unknown";
+    }
+
+    out.buffer = buffer;
+    out.start = 0;
+    out.end = vendorName.getBytes().length;
+    buffer.setBytes(0, vendorName.getBytes());
+  }
 }
+
 
